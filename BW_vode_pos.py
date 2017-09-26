@@ -44,9 +44,14 @@ def BW_RHS_ode_V(t, stvars, args):
     fvp = 1./(1. + sp.exp(-stvars[0,:]/2.))
     #this operation is a sum over W * synapse * (V_post - E_syn) for all V_post
     #want to keep using np.inner in a single line for speed
-    I_syn = np.zeros(N)
-    for i in range(N):
-        I_syn[i] = np.inner(W[i,:], (stvars[0, i] - E_syn))
+    # I_syn = np.zeros(N)
+    # for i in range(N):
+    #     I_syn[i] = np.inner(W[i,:], (stvars[0, i] - E_syn))
+
+    #I_syn = np.einsum('ij,ij->i', W, (stvars[0,:,np.newaxis] - E_syn))
+    Driving_Force = np.subtract(stvars[0,:,np.newaxis], E_syn)
+
+    I_syn = np.einsum('ij,ij->i', W, Driving_Force)
 
     #Currents
     I_Na = 35. * (m_inf**3.) * stvars[1] * (stvars[0] - 55.)
@@ -133,7 +138,7 @@ I_app[P2s:P2e] = stim
 I_app = np.concatenate([I_app, np.zeros(Ni)])
 
 IV = InitialValues
-runtime = 500. #ms
+runtime = 100. #ms
 h = 0.01
 t = np.linspace(0, runtime, runtime/h)
 
