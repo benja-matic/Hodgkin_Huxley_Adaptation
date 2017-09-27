@@ -41,7 +41,7 @@ def BW_RHS_odeint(stvars, t, I_app, W, N, E_syn):
     b_n = 0.125*np.exp(-(stvars[0] + 44.)/80.)
     #synapse
     fvp = 1./(1. + sp.exp(-stvars[0,:]/2.))
-    I_syn = np.inner(W, stvars[3,:]) * (stvars[0,:] - E_syn)
+    I_syn = np.einsum('ij,ij->i', W, (stvars[3,:] * (stvars[0,:,np.newaxis] - E_syn)))
     #Currents
     I_Na = 35. * (m_inf**3.) * stvars[1] * (stvars[0] - 55.)
     I_K = 9. * (stvars[2]**4.) * (stvars[0] + 90.)
@@ -84,17 +84,17 @@ Ne = 400
 Ni = 100
 N = Ne+Ni
 
-Aee = 3.
-Aei = 10.
-Aie = 20.
-Aii = 5.
+Aee = .4
+Aei = 1.
+Aie = 1.5
+Aii = 2.5
 
-kee = 2.
+kee = 3.
 kei = .3
 kie = .3
 kii = .3
 
-stim = 1.
+stim = .5
 p = .2
 h = 0.01
 
@@ -160,13 +160,13 @@ a1.set_xlabel("Time (" + str(h) + " ms)", fontsize = 48)
 
 fig2, ax = plt.subplots(4,1)
 ax[0].set_title("State Variables for Single Neuron", fontsize = 54)
-ax[0].plot(v[n0,:])
+ax[0].plot(vhist[n0,:])
 ax[0].set_ylabel("Voltage (mV)", fontsize = 24)
-ax[1].plot(v[N+n0,:])
+ax[1].plot(vhist[N+n0,:])
 ax[1].set_ylabel("Sodium Activation", fontsize = 24)
-ax[2].plot(v[n0 + (N*2),:])
+ax[2].plot(vhist[n0 + (N*2),:])
 ax[2].set_ylabel("Potassium Activation", fontsize = 24)
-ax[3].plot(v[n0 + (N*3),:])
+ax[3].plot(vhist[n0 + (N*3),:])
 ax[3].set_ylabel("Synapse Activation", fontsize = 24)
 ax[3].set_xlabel("Time (" + str(h) + " ms)", fontsize = 48)
 

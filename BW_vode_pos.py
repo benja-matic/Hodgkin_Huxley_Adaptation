@@ -11,6 +11,7 @@ Simulate network of Buzsaki-Wang neurons using scipy implementation of VODE
 
 WEIGHTS MATRICES NOW SET TO BE POSITIVE
 SIGN OF SYNAPSE IS DECIDED BY REVERSAL POTENTIAL E_syn
+CdV/dt = I_app - (sum of currents)
 
 Neurons 0:Ne are excitatory, Ne:N are inhibitory
 VODE requires a flat array, so initial values are 4*N long
@@ -25,6 +26,287 @@ def basic_spike_detector(V):
             if V[i-1] <= 0:
                 spikes.append(i)
     return np.array(spikes)
+
+#single threshold shmitt trigger set to 0
+def schmitt_trigger_1T_spikes(V):
+    Flag = False
+    Flag_Storage = []
+    Time_Storage = []
+    Threshold = 0
+    for i in range(len(V)):
+        Test = (V[i] > Threshold)
+        if Test != Flag:
+            Flag_Storage.append(Flag)
+            Time_Storage.append(i)
+            Flag = not Flag
+    if len(Time_Storage) %2 != 0:
+        Flag_Storage.pop()
+        Time_Storage.pop()
+    spikes = np.zeros(len(Time_Storage)/2)
+    for i in range(0, len(Time_Storage), 2):
+        m = np.mean(Time_Storage[i:i+2])
+        spikes[i/2] = m
+    return spikes
+#double Threshold trigger with variable Thresholds
+def schmitt_trigger_2T_spikes(V, t1, t2):
+    Flag = False
+    Flag_Storage = []
+    Time_Storage = []
+    Thresholds = [t1, t2]
+    Threshold = Thresholds[0]
+    for i in range(len(V)):
+        Test = (V[i] > Threshold)
+        if Test != Flag:
+            Flag_Storage.append(Flag)
+            Time_Storage.append(i)
+            Flag = not Flag
+            Thresholds = np.roll(Thresholds, 1)
+            Threshold = Thresholds[0]
+    if len(Time_Storage) %2 != 0:
+        Flag_Storage.pop()
+        Time_Storage.pop()
+    spikes = np.zeros(len(Time_Storage)/2)
+    for i in range(0, len(Time_Storage), 2):
+        m = np.mean(Time_Storage[i:i+2])
+        spikes[i/2] = m
+    return spikes
+
+
+def CV(d):
+    m = np.mean(d)
+    s = np.std(d)
+    return s/m
+
+def FANO(A):
+    return np.var(A)/np.mean(A)
+
+#keep only spikes after transient; assumes raster stored conventionally
+def kill_transient(t, r, trans):
+    m = np.where(t > trans)[0]
+    return t[m], r[m]
+
+#get the set of neurons satisfying criteria so you don't have to search again
+def neuron_finder(r, min_spikes, min_neurons):
+    Neurons, Counts = np.unique(r, return_counts = True)
+    N = []
+    for i in range(len(Neurons)):
+        if Counts[i] > min_spikes:
+            N.append(i)
+    if len(N) > min_neurons:
+        return N
+    else:
+        return -5.
+#assumes conventional raster format, computes CV_isi
+def gather_CV(t, r, Neurons):
+    CVS = np.zeros(len(Neurons))
+    for i in range(len(Neurons)):
+        m = np.where(r == Neurons[i])[0]
+        T = t[m]
+        D = np.diff(T)
+        cv = CV(D)
+        CVS[i] = cv
+    return CVS
+
+#time is fbinsize-d chunks from some start (after transient) to stop (end of sim, or last spike)
+#spikes is spike times for this neuron
+def grid_FF(spikes, time):
+    counts = np.zeros(len(time)-1)
+    for i in range(len(counts)):
+        x = len(np.where((spikes > time[i]) & (spikes < time[i+1]))[0])
+        counts[i] = x
+    return np.var(counts)/np.mean(counts)
+
+#build raster and do statistics off the cuff
+#stores raster in 'special raster' (SR) format:
+#   index is neuron number
+#   te[i] is spike times of neuron i
+#   re[i] is an array of i's for plotting convenience
+def build_raster_plus(V, Ne, Ni, transient, runtime, mtime, min_spikes, min_neurons, fbinsize):
+    te = []
+    re = []
+    ti = []
+    ri = []
+    half = round(Ne/2.)
+    top_neurons = []
+    bot_neurons = []
+    Rates = []
+    FFS = []
+    CVS = []
+    FF_time = np.arange(transient, runtime, fbinsize)
+    for i in range(Ne):
+        nes = basic_spike_detector(V[i,:]) #spikes
+        nest = [k for k in nes if k > transient]
+        te.append(np.array(nest))
+        re.append(np.zeros(len(nest)) + i)
+        Rates.append(len(nest)/mtime) #rate
+        if len(nest) > min_spikes:
+            fano = grid_FF(nest, FF_time) #fano
+            FFS.append(fano)
+            d = np.diff(nest)
+            cv = CV(d) #cv
+            CVS.append(cv)
+            if i >= half:
+                top_neurons.append(i)
+            else:
+                bot_neurons.append(i)
+    if len(bot_neurons) + len(top_neurons) < min_neurons:
+        return np.zeros(9) -5.
+    else:
+        return te, re, top_neurons, bot_neurons, CVS, FFS, Rates
+
+#randomly sample neurons, calculate count trains, cross correlate them
+#stores count-trains for neurons already computed, skips pairs already done together
+def rand_pair_cor(bin_size, t, r, Neurons, n):
+    t0 = np.min(t)
+    t1 = np.max(t)
+    bins = np.arange(t0, t1, bin_size)
+    count1 = np.zeros((n, len(bins)-1))
+    ya = []
+    lank = len(Neurons)
+    shank = np.zeros((lank, len(bins) - 1))
+    cor_store = []
+    pairs = []
+    for i in range(n):
+        #draw two random neurons
+        x1 = np.random.randint(0, lank)
+        x2 = np.random.randint(0, lank)
+        #if both have been checked already
+        if ((x1 in ya) & (x2 in ya)):
+            #if you've compared them to eachother, loop again
+            if [x1, x2] in pairs:
+                pass
+            #if you already have data for both, but haven't compared them to eachother, correlate and update
+            else:
+                c = ss.pearsonr(shank[x1,:], shank[x2,:])[0]
+                pairs.append([x1, x2])
+                if math.isnan(c) == False:
+                    cor_store.append(c)
+        #if you have data for 1 but not the other, get counts, correlate and update
+        elif ((x1 in ya) & ((x2 in ya) == False)):
+            INT2 = t[np.where(r == Neurons[x2])[0]]
+            for j in range(len(bins)-1):
+                shank[x2, j] = len(np.where((bins[j] <= INT2) & (INT2 < bins[j+1]))[0])
+            c = ss.pearsonr(shank[x1,:], shank[x2,:])[0]
+            ya.append(x2)
+            pairs.append([x1, x2])
+            if math.isnan(c) == False:
+                cor_store.append(c)
+        #if you have data for the other but not the 1, get counts, correlate and update
+        elif ((x2 in ya) & ((x1 in ya) == False)):
+            INT2 = t[np.where(r == Neurons[x1])[0]]
+            for j in range(len(bins)-1):
+                shank[x1, j] = len(np.where((bins[j] <= INT2) & (INT2 < bins[j+1]))[0])
+            c = ss.pearsonr(shank[x1,:], shank[x2,:])[0]
+            ya.append(x1)
+            pairs.append([x1, x2])
+            if math.isnan(c) == False:
+                cor_store.append(c)
+        #if neither is in the list, get counts, correlate, and update
+        else:
+            INT1 = t[np.where(r == Neurons[x1])[0]]
+            INT2 = t[np.where(r == Neurons[x2])[0]]
+            for j in range(len(bins)-1):
+                x1x = np.where((bins[j] <= INT1) & (INT1 < bins[j+1]))[0]
+                x2x = np.where((bins[j] <= INT2) & (INT2 < bins[j+1]))[0]
+                shank[x1, j] = len(x1x)
+                shank[x2, j] = len(x2x)
+            ya.append(x1)
+            ya.append(x2)
+            pairs.append([x1, x2])
+            c = ss.pearsonr(shank[x1,:], shank[x2,:])[0]
+            if math.isnan(c) == False:
+                cor_store.append(c)
+    return np.mean(cor_store)
+
+#As above, but takes the 'special raster' format returned by build_raster_plus
+def rand_pair_cor_SR(start, stop, bin_size, t, r, Neurons, n):
+    bins = np.arange(start, stop +1., bin_size)
+    count1 = np.zeros((n, len(bins)-1))
+    ya = []
+    lank = len(Neurons)
+    shank = np.zeros((lank, len(bins) - 1))
+    cor_store = []
+    pairs = []
+    for i in range(n):
+        #draw two random neurons
+        x1 = np.random.randint(0, lank)
+        x2 = np.random.randint(0, lank)
+        #if both have been checked already
+        if ((x1 in ya) & (x2 in ya)):
+            #if you've compared them to eachother, loop again
+            if [x1, x2] in pairs:
+                #print "compared these two together already"
+                pass
+            #if you already have data for both, but haven't compared them to eachother, correlate and update
+            else:
+                c = ss.pearsonr(shank[x1,:], shank[x2,:])[0]
+                pairs.append([x1, x2])
+                if math.isnan(c) == False:
+                    cor_store.append(c)
+        #if you have data for 1 but not the other, get counts, correlate and update
+        elif ((x1 in ya) & ((x2 in ya) == False)):
+            INT2 = t[Neurons[x2]]
+            for j in range(len(bins)-1):
+                shank[x2, j] = len(np.where((bins[j] <= INT2) & (INT2 < bins[j+1]))[0])
+            c = ss.pearsonr(shank[x1,:], shank[x2,:])[0]
+            ya.append(x2)
+            pairs.append([x1, x2])
+            if math.isnan(c) == False:
+                cor_store.append(c)
+        #if you have data for the other but not the 1, get counts, correlate and update
+        elif ((x2 in ya) & ((x1 in ya) == False)):
+            INT2 = t[Neurons[x1]]
+            for j in range(len(bins)-1):
+                shank[x1, j] = len(np.where((bins[j] <= INT2) & (INT2 < bins[j+1]))[0])
+            c = ss.pearsonr(shank[x1,:], shank[x2,:])[0]
+            ya.append(x1)
+            pairs.append([x1, x2])
+            if math.isnan(c) == False:
+                cor_store.append(c)
+        #if neither is in the list, get counts, correlate, and update
+        else:
+            INT1 = t[Neurons[x1]]
+            INT2 = t[Neurons[x2]]
+            for j in range(len(bins)-1):
+                x1x = np.where((bins[j] <= INT1) & (INT1 < bins[j+1]))[0]
+                x2x = np.where((bins[j] <= INT2) & (INT2 < bins[j+1]))[0]
+                shank[x1, j] = len(x1x)
+                shank[x2, j] = len(x2x)
+            ya.append(x1)
+            ya.append(x2)
+            pairs.append([x1, x2])
+            c = ss.pearsonr(shank[x1,:], shank[x2,:])[0]
+            if math.isnan(c) == False:
+                cor_store.append(c)
+    return np.mean(cor_store)
+
+#WTA_ness and which pool was winning
+def bias(re, Ne):
+    half = round(Ne/2.)
+    tot = float(len(re))
+    top = len(np.where((re > round(Ne/2.)) & (re < Ne))[0])
+    bot = len(np.where(re < half)[0])
+    if top > bot:
+        bias = 1
+        win = top
+    else:
+        bias = 2
+        win = bot
+    return bias, win/tot
+
+#same, but using SR format
+def bias_SR(te):
+    half = int(round((len(te)/2.)))
+    bot = float(sum([len(te[i]) for i in range(half)]))
+    top = float(sum([len(te[i]) for i in range(half, len(te))]))
+    tot = top + bot
+    if top > bot:
+        bias = 1
+        win = top
+    else:
+        bias = 2
+        win = bot
+    return bias, win/tot
 
 #Right hand side function that plays nice with odeint
 def BW_RHS_ode_V(t, stvars, args):
@@ -48,10 +330,10 @@ def BW_RHS_ode_V(t, stvars, args):
     # for i in range(N):
     #     I_syn[i] = np.inner(W[i,:], (stvars[0, i] - E_syn))
 
-    #I_syn = np.einsum('ij,ij->i', W, (stvars[0,:,np.newaxis] - E_syn))
-    Driving_Force = np.subtract(stvars[0,:,np.newaxis], E_syn)
-
-    I_syn = np.einsum('ij,ij->i', W, Driving_Force)
+    I_syn = np.einsum('ij,ij->i', W, (stvars[3,:] * (stvars[0,:,np.newaxis] - E_syn)))
+    # Driving_Force = np.subtract(stvars[0,:,np.newaxis], E_syn)
+    #
+    # I_syn = np.einsum('ij,ij->i', W, Driving_Force)
 
     #Currents
     I_Na = 35. * (m_inf**3.) * stvars[1] * (stvars[0] - 55.)
@@ -91,23 +373,22 @@ def weights(Ne,Ni,kee,kei,kie_L,kii,Aee,Aei,Aie_L,Aii,pee,pei,pie,pii):
 
 #################### PARAMETERS ####################
 
-Ne = 400
-Ni = 100
+Ne = 800
+Ni = 200
 N = Ne+Ni
 
-Aee = 0.2
-Aei = 0.2
-Aie = .5
-Aii = 0.5
+Aee = .4
+Aei = 1.
+Aie = 1.5
+Aii = 2.5
 
-kee = 2.
+kee = 3.
 kei = .3
 kie = .3
 kii = .3
 
 stim = .5
-p = .8
-h = 0.01
+p = .2
 
 #################### MATRIX, I_APP, IV, TIME ####################
 
@@ -117,6 +398,8 @@ W[:Ne, :Ne] = wee
 W[:Ne, Ne:] = wei
 W[Ne:, :Ne] = wie
 W[Ne:, Ne:] = wii
+
+W_sparse = sp.sparse.csc_matrix(W)
 
 InitialValues = np.zeros(4*N) #4 state variables include voltage, sodium, potassium, and synapse
 InitialValues[:N] = np.random.uniform(-70, -50, N) #random initial conditions for voltage
@@ -138,12 +421,19 @@ I_app[P2s:P2e] = stim
 I_app = np.concatenate([I_app, np.zeros(Ni)])
 
 IV = InitialValues
-runtime = 100. #ms
+runtime = 500. #ms
+transient = 100. #ms
+stime = (runtime-transient)/1000.
 h = 0.01
 t = np.linspace(0, runtime, runtime/h)
 
+min_spikes = stime
+min_neurons = Ne/10.
+fbinsize = 150/h
+cbinsize = 10/h
+
 #################### S0IMULATE ####################
-args = [I_app, W, N]
+args = [I_app, W_sparse, N]
 v = np.zeros((N*4, len(t)+1))
 r = ode(BW_RHS_ode_V).set_integrator('vode', method='bdf')
 r.set_initial_value(IV).set_f_params(args)
@@ -158,7 +448,7 @@ print "network simulation time: ", stop_time - start_time
 
 fig, (a0, a1) = plt.subplots(2,1, figsize = (24,18))
 for i in range(N):
-    spikes = basic_spike_detector(v[i,:])
+    spikes = schmitt_trigger_2T_spikes(v[i,:], 0, -1.)
     if i <= Ne:
         a0.plot(spikes, np.zeros(len(spikes)) + i, "g.", ms = 1.)
     else:
@@ -189,9 +479,40 @@ ax[3].plot(v[n0 + (N*3),:])
 ax[3].set_ylabel("Synapse Activation", fontsize = 6)
 ax[3].set_xlabel("Time (" + str(h) + " ms)", fontsize = 12)
 
+te, re, top_neurons, bot_neurons, CVS, FFS, Rates = build_raster_plus(v[:Ne,:], Ne, Ni, transient/h, runtime/h, stime, min_spikes, min_neurons, fbinsize)
+
+if isinstance(te, list) == False:
+    print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}".format(-5, -5, -5, -5, -5, -5, -5, -5)
+else:
+    if (len(bot_neurons) < 20) & (len(top_neurons) < 20):
+        print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}".format(-5, -5, -5, -5, -5, -5, -5, -5)
+    elif (len(bot_neurons) < 20):
+        top_cor = rand_pair_cor_SR(transient/h, runtime/h, cbinsize, te, re, top_neurons, 1000)
+        bot_cor = -5.
+        mean_rate = np.mean(Rates)
+        max_rate = np.max(Rates)
+        MFF = np.mean([i for i in FFS if math.isnan(i) == False])
+        MCV = np.mean([i for i in CVS if math.isnan(i) == False])
+        winner, wta_ness = bias_SR(te)
+    elif (len(top_neurons) < 20):
+        bot_cor = rand_pair_cor_SR(transient/h, runtime/h, cbinsize, te, re, bot_neurons, 1000)
+        top_cor = -5.
+        mean_rate = np.mean(Rates)
+        max_rate = np.max(Rates)
+        MFF = np.mean([i for i in FFS if math.isnan(i) == False])
+        MCV = np.mean([i for i in CVS if math.isnan(i) == False])
+        winner, wta_ness = bias_SR(te)
+    else:
+        top_cor = rand_pair_cor_SR(transient/h, runtime/h, cbinsize, te, re, top_neurons, 1000)
+        bot_cor = rand_pair_cor_SR(transient/h, runtime/h, cbinsize, te, re, bot_neurons, 1000)
+        mean_rate = np.mean(Rates)
+        max_rate = np.max(Rates)
+        MFF = np.mean([i for i in FFS if math.isnan(i) == False])
+        MCV = np.mean([i for i in CVS if math.isnan(i) == False])
+        winner, wta_ness = bias_SR(te)
+    print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}".format(wta_ness, winner, mean_rate, max_rate, MFF, MCV, top_cor, bot_cor)
+
 plt.show()
-
-
 
 
 
