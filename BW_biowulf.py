@@ -1,11 +1,9 @@
 import numpy as np
 import scipy as sp
 import scipy.stats as ss
-import pylab as plt
 from scipy.integrate import ode
-import time as TIME
 import math
-import time as TIME
+import sys
 '''
 Simulate network of Buzsaki-Wang neurons using scipy implementation of VODE
 
@@ -369,21 +367,23 @@ Ne = 800
 Ni = 200
 N = Ne+Ni
 
-Aee = .4
-Aei = 1.
-Aie = 1.5
-Aii = 2.5
+pee = float(sys.argv[1])
+pei = float(sys.argv[2])
+pie = float(sys.argv[3])
+pii = float(sys.argv[4])
 
-kee = 3.
-kei = .3
-kie = .3
-kii = .3
+Aee = float(sys.argv[5])
+Aei = float(sys.argv[6])
+Aie = float(sys.argv[7])
+Aii = float(sys.argv[8])
 
-stim = .5
-pee = .2
-pei = .2
-pie = .2
-pii = .2
+kee = float(sys.argv[9])
+kei = float(sys.argv[10])
+kie = float(sys.argv[11])
+kii = float(sys.argv[12])
+
+stim = float(sys.argv[13])
+ID = float(sys.argv[14])
 #################### MATRIX, I_APP, IV, TIME ####################
 
 wee, wei, wie, wii = weights(Ne, Ni, kee, kei, kie, kii, Aee, Aei, Aie, Aii, pee, pei, pie, pii)
@@ -432,54 +432,18 @@ v = np.zeros((N*4, len(t)+1))
 r = ode(BW_RHS_ode_V).set_integrator('vode', method='bdf')
 r.set_initial_value(IV).set_f_params(args)
 c=0
-start_time = TIME.time()
 while r.successful() and r.t < runtime:
     #print r.integrate(r.t + h)
     v[:,c] = r.integrate(r.t + h)
     c+=1
-stop_time = TIME.time()
-print "network simulation time: ", stop_time - start_time
-
-fig, (a0, a1) = plt.subplots(2,1, figsize = (24,18))
-for i in range(N):
-    spikes = schmitt_trigger_2T_spikes(v[i,:], 0, -1.)
-    if i <= Ne:
-        a0.plot(spikes, np.zeros(len(spikes)) + i, "g.", ms = 1.)
-    else:
-        a1.plot(spikes, np.zeros(len(spikes)) + i - Ne, "b.", ms = 1.)
-
-
-
-n0 = 420
-
-a0.set_title("Raster Plot of Network", fontsize = 24)
-a0.tick_params(labelsize = 6)
-a0.set_ylabel("Excitatory Neuron #", fontsize = 8)
-a0.set_yticks([Ne/4., Ne/2., Ne*.75, Ne])
-a1.tick_params(labelsize = 6)
-a1.set_ylabel("Inhibitory Neuron #", fontsize = 8)
-a1.set_yticks([Ni/4., Ni/2., Ni*.75, Ni])
-a1.set_xlabel("Time (" + str(h) + " ms)", fontsize = 12)
-
-fig2, ax = plt.subplots(4,1)
-ax[0].set_title("State Variables for Single Neuron", fontsize = 24)
-ax[0].plot(v[n0,:])
-ax[0].set_ylabel("Voltage (mV)", fontsize = 6)
-ax[1].plot(v[N+n0,:])
-ax[1].set_ylabel("Sodium Activation", fontsize = 6)
-ax[2].plot(v[n0 + (N*2),:])
-ax[2].set_ylabel("Potassium Activation", fontsize = 6)
-ax[3].plot(v[n0 + (N*3),:])
-ax[3].set_ylabel("Synapse Activation", fontsize = 6)
-ax[3].set_xlabel("Time (" + str(h) + " ms)", fontsize = 12)
 
 te, re, top_neurons, bot_neurons, CVS, FFS, Rates = build_raster_plus(v[:Ne,:], Ne, Ni, transient/h, runtime/h, stime, min_spikes, min_neurons, fbinsize)
 
 if isinstance(te, list) == False:
-    print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}".format(-5, -5, -5, -5, -5, -5, -5, -5)
+    print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}".format(-5, -5, -5, -5, -5, -5, -5, -5, ID)
 else:
     if (len(bot_neurons) < 20) & (len(top_neurons) < 20):
-        print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}".format(-5, -5, -5, -5, -5, -5, -5, -5)
+        print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}".format(-5, -5, -5, -5, -5, -5, -5, -5, ID)
     elif (len(bot_neurons) < 20):
         top_cor = rand_pair_cor_SR(transient/h, runtime/h, cbinsize, te, re, top_neurons, 1000)
         bot_cor = -5.
@@ -504,9 +468,8 @@ else:
         MFF = np.mean([i for i in FFS if math.isnan(i) == False])
         MCV = np.mean([i for i in CVS if math.isnan(i) == False])
         winner, wta_ness = bias_SR(te)
-    print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}".format(wta_ness, winner, mean_rate, max_rate, MFF, MCV, top_cor, bot_cor)
+    print "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}".format(wta_ness, winner, mean_rate, max_rate, MFF, MCV, top_cor, bot_cor, ID)
 
-plt.show()
 
 
 
