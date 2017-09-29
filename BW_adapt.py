@@ -339,7 +339,7 @@ def BW_RHS_ode_V(t, stvars, args):
     dhdt = 5. * (a_h*(1. - stvars[1]) - (b_h*stvars[1]))
     dndt = 5. * (a_n*(1. - stvars[2]) - (b_n*stvars[2]))
     dsdt = 12.*fvp*(1.-stvars[3,:]) - (0.1*stvars[3,:]) #outgoing synapse
-    dmdt = (M_inf - stvars[4])/1000. #tau_a~O(1s)
+    dmdt = (M_inf - stvars[4])/2000. #tau_a~O(1s)
 
     return np.concatenate([dVdt, dhdt, dndt, dsdt, dmdt])
 
@@ -402,7 +402,7 @@ W_sparse = sp.sparse.csc_matrix(W)
 InitialValues = np.zeros(5*N) #4 state variables include voltage, sodium, potassium, and synapse
 InitialValues[:N] = np.random.uniform(-70, -50, N) #random initial conditions for voltage
 InitialValues[N:3*N] = 1. #sodium and potassium start at this value
-InitialValues[4*N:] = np.random.uniform(0, .2, N)
+InitialValues[4*N:] = np.random.uniform(0, .1, N)
 
 E_syn = np.zeros(N)
 E_syn[Ne:] = -75. #inhibitory synapses have a reversal in the driving force
@@ -420,10 +420,10 @@ I_app[P2s:P2e] = stim
 I_app = np.concatenate([I_app, np.zeros(Ni)])
 
 g_adapt = np.zeros(N)
-g_adapt[:Ne] = 0.1
+g_adapt[:Ne] = 1.
 
 IV = InitialValues
-runtime = 1000. #ms
+runtime = 6000. #ms
 transient = 100. #ms
 stime = (runtime-transient)/1000.
 h = 0.01
@@ -458,7 +458,7 @@ for i in range(N):
 
 
 
-n0 = 420
+n0 = 100
 
 a0.set_title("Raster Plot of Network", fontsize = 24)
 a0.tick_params(labelsize = 6)
