@@ -1,12 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
-plt.ion()
+import os
+import math
+import scipy.stats as ss
 
 
 def read_raster(x):
     with open(x, 'r') as f:
         a = f.read()
-    b = a.spit('\n')
+    b = a.split('\n')
     b.pop()
     c = [i.split(',') for i in b]
     te = np.array([float(i[0]) for i in c])
@@ -47,6 +49,104 @@ def nt_diff(t, r, ntotal, half, netd_binsize):
         ntd[j] = T
         nts[j] = len(m)
     return ntd/nts
+
+def nt_diff_H(t, r, ntotal, half, netd_binsize):
+    netd_bins = np.arange(0, ntotal, netd_binsize)
+    ntd = np.zeros(len(netd_bins)-1)
+    nts = np.empty_like(ntd)
+    for j in range(len(ntd)):
+        m = np.where((netd_bins[j] < t) & (t <= netd_bins[j+1]))[0]
+        T = sum(r[m] > half)
+        c = len(m) - T
+        ntd[j] = T-c
+        nts[j] = len(m)
+    return ntd, nts
+
+def WLD_01(s, tl, th):
+    if np.max(s) < tl:
+        return ["lose", -1], [0, len(s)]
+    elif np.min(s) >= th:
+        return ["win", -1], [0, len(s)]
+    elif (tl <= np.max(s)) & (th >= np.max(s)) & (tl <= np.min(s)) & (th >= np.min(s)):
+        return ["draw", -1], [0, len(s)]
+    else:
+        times = []
+        flags = []
+        if s[0] > th:
+            flag = "win"
+        elif (tl <= s[0]) & (s[0] <= th):
+            flag = "draw"
+        elif s[0] < tl:
+            flag = "lose"
+        times.append(0)
+        flags.append(flag)
+        s2 = s[1:]
+        for i in range(len(s2)):
+            f1 = comp_01(s2[i], tl, th)
+            if f1 != flag:
+                flag = f1
+                times.append(i+1)
+                flags.append(flag)
+        times.append(len(s))
+        flags.append("end")
+        return flags, np.array(times)
+
+def comp_01(x, tl, th):
+    if x > th:
+        return "win"
+    elif tl <= x <= th:
+        return "draw"
+    elif x < tl:
+        return "lose"
+    else:
+        return "weird"
+
+function WLD_01(s, tl, th)
+  if maximum(s) < tl
+    return ["lose", "end"], [1, length(s)]
+  elseif minimum(s) >= th
+    return ["win", "end"], [1, length(s)]
+  elseif (tl <= maximum(s) <= th) & (tl <= minimum(s) <= th)
+    return ["draw", "end"], [1, length(s)]
+  end
+  times = []
+  flags = []
+  if s[1] >= th
+    flag = "win"
+  elseif tl <= s[1] <= th
+    flag = "draw"
+  elseif s[1] < tl
+    flag = "lose"
+  end
+
+  push!(times, 1)
+  push!(flags, flag)
+
+  s2 = s[2:end]
+  for i in eachindex(s2)
+    f1 = comp_01(s2[i], tl, th)
+    if f1 != flag
+      flag = f1
+      push!(times, i+1)
+      push!(flags, flag)
+    end
+  end
+  push!(times, length(s))
+  push!(flags, "end")
+  return flags, times
+end
+
+function comp_01(x, tl, th)
+  if x > th
+    return "win"
+  elseif tl <= x <= th
+    return "draw"
+  elseif x < tl
+    return "lose"
+  else
+    return "weird"
+  end
+end
 
 def comp(x):
     if x > 0.7:
@@ -254,13 +354,147 @@ def rand_pair_cor(bin_size, t, r, Neurons, n):
 
 
 ntotal = 10000000.
-import os
+# os.chdir('c://Users/cohenbp/Documents/Neuroscience/2018/BW_Sims')
 contents = os.listdir(os.getcwd())
 files = []
 for i in contents:
     if i[-3:] == 'txt':
         files.append(i)
 
-sim2 = [i for i in files if i[3] == '2']
+# sim2 = [i for i in files if i[3] == '2']
 sim3 = [i for i in files if i[3] == '3']
 sim5 = [i for i in files if i[3] == '5']
+Ne = 400
+cbinsize = 1000
+fbinsize = 5000
+netd_binsize = 25000
+half = int(round(Ne/2))
+
+def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
+    sig = nt_diff(te, re, ntotal, half, netd_binsize)
+    flags, times = WLD(sig)
+    top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
+    Neurons = neuron_finder(re, 10, 100)
+    TN = [i for i in Neurons if i >= half]
+    BN = [i for i in Neurons if i < half]
+    t2, f2 = splice_reversions(flags, times)
+    d = np.diff(np.array(netd_binsize)*t2)
+    fw = np.array([i for i in range(len(f2)) if f2[i] == 'win'])
+    fl = np.array([i for i in range(len(f2)) if f2[i] == 'lose'])
+    alts = len(t2)
+    MDT = np.mean(d[fw])
+    MDB = np.mean(d[fl])
+    MD = np.mean(d)
+    STD = np.std(d)
+    CVD = CV(d)
+    tbf, rbf = ligase(bot, te, re, BN)
+    ttf, rtf = ligase(top, te, re, TN)
+    CVSTW = build_CV(te, re, TN, top)
+    CVSBW = build_CV(te, re, BN, bot)
+    FFST = pool_FF(TN, ttf, rtf, fbinsize)
+    FFSB = pool_FF(BN, tbf, rbf, fbinsize)
+    cwT = rand_pair_cor(cbinsize, ttf, rtf, TN, 1000)
+    cwB = rand_pair_cor(cbinsize, tbf, rbf, BN, 1000)
+    return [MD, STD, CVD, alts, cwT, cwB, np.mean(CVSTW), np.mean(CVSBW), np.mean(FFST), np.mean(FFSB)]
+
+
+data3 = np.zeros((10, len(sim3)))
+data = np.zeros((10, len(sim5)))
+for i in range(len(sim5)):
+    t, r = read_raster(sim5[i])
+    data[:, i] = get_stats(t, r, ntotal, half, netd_binsize, fbinsize, cbinsize)
+
+for i in range(len(sim3)):
+    t, r = read_raster(sim3[i])
+    data3[:, i] = get_stats(t, r, ntotal, half, netd_binsize, fbinsize, cbinsize)
+
+
+s = np.array([float(i.split('_')[1]) for i in sim5])
+s3 = np.array([float(i.split('_')[1]) for i in sim3])
+
+fit1 = np.polyfit(s, data[0,:]/100000, deg = 1)
+fit2 = np.polyfit(s, data[2,:], deg = 1)
+fit3 = np.polyfit(s, data[1,:]/100000, deg = 1)
+fit4 = np.polyfit(s, data[3,:], deg = 1)
+
+fig, ax = plt.subplots(3)
+
+ax[0].set_title("L4 Profile: Conductance Based Model")
+ax[0].plot(s, fit1[0]*s + fit1[1], 'r')
+ax[0].plot(s, data[0,:]/100000, "g.")
+ax[0].set_xticks([])
+ax[0].set_ylabel("Mean")
+ax[1].plot(s, fit2[0]*s + fit2[1], 'r')
+ax[1].plot(s, data[2,:], "g.")
+ax[1].set_ylabel("CV")
+ax[1].set_xticks([])
+ax[2].plot(s, fit3[0]*s + fit3[1], 'r')
+ax[2].plot(s, data[1,:]/100000, "g.")
+ax[2].set_ylabel("STD")
+ax[2].set_xlabel("Input")
+
+fig, ax = plt.subplots(3)
+
+ax[0].set_title("L4 Profile: Conductance Based Model")
+ax[0].plot(s, fit4[0]*s + fit4[1], 'r')
+ax[0].plot(s, data[3,:], "g.")
+ax[0].set_xticks([])
+ax[0].set_ylabel("Mean")
+ax[1].plot(s, fit2[0]*s + fit2[1], 'r')
+ax[1].plot(s, data[2,:], "g.")
+ax[1].set_ylabel("CV")
+ax[1].set_xticks([])
+ax[2].plot(s, fit3[0]*s + fit3[1], 'r')
+ax[2].plot(s, data[1,:]/100000, "g.")
+ax[2].set_ylabel("STD")
+ax[2].set_xlabel("Input")
+
+# fit1 = np.polyfit(s, data[0,1:]/100000, deg = 1)
+# fit2 = np.polyfit(s[1:], data[2,1:], deg = 1)
+# fit3 = np.polyfit(s[1:], data[1,1:]/100000, deg = 1)
+# fit4 = np.polyfit(s[1:], data[3,1:], deg = 1)
+#
+# fig, ax = plt.subplots(3)
+#
+# ax[0].set_title("L4 Profile: Conductance Based Model")
+# ax[0].plot(s[1:], fit1[0]*s[1:] + fit1[1], 'r')
+# ax[0].plot(s[1:], data[0, 1:]/100000, "g.")
+# ax[0].set_xticks([])
+# ax[0].set_ylabel("Mean")
+# ax[1].plot(s[1:], fit2[0]*s[1:] + fit2[1], 'r')
+# ax[1].plot(s[1:], data[2, 1:], "g.")
+# ax[1].set_ylabel("CV")
+# ax[1].set_xticks([])
+# ax[2].plot(s[1:], fit3[0]*s[1:] + fit3[1], 'r')
+# ax[2].plot(s[1:], data[1, 1:]/100000, "g.")
+# ax[2].set_ylabel("STD")
+# ax[2].set_xlabel("Input")
+#
+# fig, ax = plt.subplots(3)
+#
+# ax[0].set_title("L4 Profile: Conductance Based Model")
+# ax[0].plot(s[1:], fit4[0]*s[1:] + fit4[1], 'r')
+# ax[0].plot(s[1:], data[3, 1:], "g.")
+# ax[0].set_xticks([])
+# ax[0].set_ylabel("Mean")
+# ax[1].plot(s[1:], fit2[0]*s[1:] + fit2[1], 'r')
+# ax[1].plot(s[1:], data[2, 1:], "g.")
+# ax[1].set_ylabel("CV")
+# ax[1].set_xticks([])
+# ax[2].plot(s[1:], fit3[0]*s[1:] + fit3[1], 'r')
+# ax[2].plot(s[1:], data[1, 1:]/100000, "g.")
+# ax[2].set_ylabel("STD")
+# ax[2].set_xlabel("Input")
+
+
+fig, ax = plt.subplots(2,2)
+ax[0,0].hist(data[4])
+ax[0,1].hist(data[5])
+ax[1,0].hist(data[6])
+ax[1,1].hist(data[7])
+
+fig, ax = plt.subplots(2,2)
+ax[0,0].hist(data3[4])
+ax[0,1].hist(data3[5])
+ax[1,0].hist(data3[6])
+ax[1,1].hist(data3[7])
