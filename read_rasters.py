@@ -254,3 +254,13 @@ def rand_pair_cor(bin_size, t, r, Neurons, n):
 
 
 ntotal = 10000000.
+import os
+contents = os.listdir(os.getcwd())
+files = []
+for i in contents:
+    if i[-3:] == 'txt':
+        files.append(i)
+
+sim2 = [i for i in files if i[3] == '2']
+sim3 = [i for i in files if i[3] == '3']
+sim5 = [i for i in files if i[3] == '5']
