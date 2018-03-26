@@ -1,14 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import os
-import math
-import scipy.stats as ss
+plt.ion()
 
 
 def read_raster(x):
     with open(x, 'r') as f:
         a = f.read()
-    b = a.split('\n')
+    b = a.spit('\n')
     b.pop()
     c = [i.split(',') for i in b]
     te = np.array([float(i[0]) for i in c])
@@ -256,87 +254,3 @@ def rand_pair_cor(bin_size, t, r, Neurons, n):
 
 
 ntotal = 10000000.
-os.chdir('c://Users/cohenbp/Documents/Neuroscience/2018/BW_Sims')
-contents = os.listdir(os.getcwd())
-files = []
-for i in contents:
-    if i[-3:] == 'txt':
-        files.append(i)
-
-# sim2 = [i for i in files if i[3] == '2']
-sim3 = [i for i in files if i[3] == '3']
-sim5 = [i for i in files if i[3] == '5']
-Ne = 400
-cbinsize = 1000
-fbinsize = 5000
-netd_binsize = 25000
-half = int(round(Ne/2))
-
-def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
-    sig = nt_diff(te, re, ntotal, half, netd_binsize)
-    flags, times = WLD(sig)
-    top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
-    Neurons = neuron_finder(re, 10, 100)
-    TN = [i for i in Neurons if i >= half]
-    BN = [i for i in Neurons if i < half]
-    t2, f2 = splice_reversions(flags, times)
-    d = np.diff(np.array(netd_binsize)*t2)
-    fw = np.array([i for i in range(len(f2)) if f2[i] == 'win'])
-    fl = np.array([i for i in range(len(f2)) if f2[i] == 'lose'])
-    alts = len(t2)
-    MDT = np.mean(d[fw])
-    MDB = np.mean(d[fl])
-    MD = np.mean(d)
-    STD = np.std(d)
-    CVD = CV(d)
-    tbf, rbf = ligase(bot, te, re, BN)
-    ttf, rtf = ligase(top, te, re, TN)
-    CVSTW = build_CV(te, re, TN, top)
-    CVSBW = build_CV(te, re, BN, bot)
-    FFST = pool_FF(TN, ttf, rtf, fbinsize)
-    FFSB = pool_FF(BN, tbf, rbf, fbinsize)
-    cwT = rand_pair_cor(cbinsize, ttf, rtf, TN, 1000)
-    cwB = rand_pair_cor(cbinsize, tbf, rbf, BN, 1000)
-    return [MD, STD, CVD, alts, cwT, cwB, np.mean(CVSTW), np.mean(CVSBW), np.mean(FFST), np.mean(FFSB)]
-
-
-data3 = np.zeros((10, len(sim3)))
-data = np.zeros((10, len(sim5)))
-for i in range(len(sim5)):
-    t, r = read_raster(sim5[i])
-    data[:, i] = get_stats(t, r, ntotal, half, netd_binsize, fbinsize, cbinsize)
-
-for i in range(len(sim3)):
-    t, r = read_raster(sim3[i])
-    data3[:, i] = get_stats(t, r, ntotal, half, netd_binsize, fbinsize, cbinsize)
-
-
-s = np.array([float(i.split('_')[1]) for i in sim5])
-s3 = np.array([float(i.split('_')[1]) for i in sim3])
-
-
-fit1 = np.polyfit(s[1:], data[0,1:]/ntotal, deg = 1)
-fit2 = np.polyfit(s[1:], data[2,1:], deg = 1)
-fit3 = np.polyfit(s[1:], data[1,1:], deg = 1)
-
-fig, ax = plt.subplots(3)
-
-ax[0].plot(s[1:], fit1[0]*s[1:] + fit1[1], 'r')
-ax[0].plot(s[1:], data[0, 1:]/ntotal, "g.")
-ax[1].plot(s[1:], fit2[0]*s[1:] + fit2[1], 'r')
-ax[1].plot(s[1:], data[2, 1:], "g.")
-ax[2].plot(s[1:], fit3[0]*s[1:] + fit3[1], 'r')
-ax[2].plot(s[1:], data[1, 1:], "g.")
-
-
-fig, ax = plt.subplots(2,2)
-ax[0,0].hist(data[4])
-ax[0,1].hist(data[5])
-ax[1,0].hist(data[6])
-ax[1,1].hist(data[7])
-
-fig, ax = plt.subplots(2,2)
-ax[0,0].hist(data3[4])
-ax[0,1].hist(data3[5])
-ax[1,0].hist(data3[6])
-ax[1,1].hist(data3[7])
