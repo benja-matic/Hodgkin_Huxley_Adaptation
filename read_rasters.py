@@ -325,8 +325,10 @@ netd_binsize = 25000
 half = int(round(Ne/2))
 
 def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
-    sig = nt_diff(te, re, ntotal, half, netd_binsize)
-    flags, times = WLD(sig)
+    # sig = nt_diff(te, re, ntotal, half, netd_binsize)
+    sig = nt_diff_H(te, re, ntotal, half, netd_binsize)
+    # flags, times = WLD(sig)
+    flags, times = WLD_01(sig, -1./3, 1./3)
     top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
     Neurons = neuron_finder(re, 10, 100)
     TN = [i for i in Neurons if i >= half]
