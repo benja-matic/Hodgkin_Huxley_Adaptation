@@ -325,11 +325,12 @@ netd_binsize = 25000
 half = int(round(Ne/2))
 
 def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
-    # sig = nt_diff(te, re, ntotal, half, netd_binsize)
-    sig = nt_diff_H(te, re, ntotal, half, netd_binsize)
-    # flags, times = WLD(sig)
-    flags, times = WLD_01(sig, -1./3, 1./3)
+    sig = nt_diff(te, re, ntotal, half, netd_binsize)
+    flags, times = WLD(sig)
     top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
+    MDT = tdom/length(top)
+    MDB = bdom/length(bot)
+    MDN = tnmz/length(nmz)
     Neurons = neuron_finder(re, 10, 100)
     TN = [i for i in Neurons if i >= half]
     BN = [i for i in Neurons if i < half]
@@ -338,9 +339,9 @@ def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
     fw = np.array([i for i in range(len(f2)) if f2[i] == 'win'])
     fl = np.array([i for i in range(len(f2)) if f2[i] == 'lose'])
     alts = len(t2)
-    MDT = np.mean(d[fw])
-    MDB = np.mean(d[fl])
-    MD = np.mean(d)
+    MDT2 = np.mean(d[fw])
+    MDB2 = np.mean(d[fl])
+    MD2 = np.mean(d)
     STD = np.std(d)
     CVD = CV(d)
     tbf, rbf = ligase(bot, te, re, BN)
@@ -353,6 +354,22 @@ def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
     cwB = rand_pair_cor(cbinsize, tbf, rbf, BN, 1000)
     return [MD, STD, CVD, alts, cwT, cwB, np.mean(CVSTW), np.mean(CVSBW), np.mean(FFST), np.mean(FFSB)]
 
+def get_L2(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
+    sig = nt_diff_H(te, re, ntotal, half, netd_binsize)
+    flags, times = WLD_01(sig, -1./3, 1./3)
+    top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
+    MDT = tdom/length(top)
+    MDB = bdom/length(bot)
+    MDN = tnmz/length(nmz)
+    t2, f2 = splice_reversions(flags, times)
+    d = np.diff(np.array(netd_binsize)*t2)
+    fw = np.array([i for i in range(len(f2)) if f2[i] == 'win'])
+    fl = np.array([i for i in range(len(f2)) if f2[i] == 'lose'])
+    alts = len(t2)
+    MDT2 = np.mean(d[fw])
+    MDB2 = np.mean(d[fl])
+    MD2 = np.mean(d)
+    return [MDT, MDB, len(times), MD2, MDT2, MDB2]
 
 # data3 = np.zeros((10, len(sim3)))
 # data = np.zeros((10, len(sim5)))
