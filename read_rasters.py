@@ -101,52 +101,6 @@ def comp_01(x, tl, th):
     else:
         return "weird"
 
-function WLD_01(s, tl, th)
-  if maximum(s) < tl
-    return ["lose", "end"], [1, length(s)]
-  elseif minimum(s) >= th
-    return ["win", "end"], [1, length(s)]
-  elseif (tl <= maximum(s) <= th) & (tl <= minimum(s) <= th)
-    return ["draw", "end"], [1, length(s)]
-  end
-  times = []
-  flags = []
-  if s[1] >= th
-    flag = "win"
-  elseif tl <= s[1] <= th
-    flag = "draw"
-  elseif s[1] < tl
-    flag = "lose"
-  end
-
-  push!(times, 1)
-  push!(flags, flag)
-
-  s2 = s[2:end]
-  for i in eachindex(s2)
-    f1 = comp_01(s2[i], tl, th)
-    if f1 != flag
-      flag = f1
-      push!(times, i+1)
-      push!(flags, flag)
-    end
-  end
-  push!(times, length(s))
-  push!(flags, "end")
-  return flags, times
-end
-
-function comp_01(x, tl, th)
-  if x > th
-    return "win"
-  elseif tl <= x <= th
-    return "draw"
-  elseif x < tl
-    return "lose"
-  else
-    return "weird"
-  end
-end
 
 def comp(x):
     if x > 0.7:
@@ -398,56 +352,56 @@ def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
     return [MD, STD, CVD, alts, cwT, cwB, np.mean(CVSTW), np.mean(CVSBW), np.mean(FFST), np.mean(FFSB)]
 
 
-data3 = np.zeros((10, len(sim3)))
-data = np.zeros((10, len(sim5)))
-for i in range(len(sim5)):
-    t, r = read_raster(sim5[i])
-    data[:, i] = get_stats(t, r, ntotal, half, netd_binsize, fbinsize, cbinsize)
-
-for i in range(len(sim3)):
-    t, r = read_raster(sim3[i])
-    data3[:, i] = get_stats(t, r, ntotal, half, netd_binsize, fbinsize, cbinsize)
-
-
-s = np.array([float(i.split('_')[1]) for i in sim5])
-s3 = np.array([float(i.split('_')[1]) for i in sim3])
-
-fit1 = np.polyfit(s, data[0,:]/100000, deg = 1)
-fit2 = np.polyfit(s, data[2,:], deg = 1)
-fit3 = np.polyfit(s, data[1,:]/100000, deg = 1)
-fit4 = np.polyfit(s, data[3,:], deg = 1)
-
-fig, ax = plt.subplots(3)
-
-ax[0].set_title("L4 Profile: Conductance Based Model")
-ax[0].plot(s, fit1[0]*s + fit1[1], 'r')
-ax[0].plot(s, data[0,:]/100000, "g.")
-ax[0].set_xticks([])
-ax[0].set_ylabel("Mean")
-ax[1].plot(s, fit2[0]*s + fit2[1], 'r')
-ax[1].plot(s, data[2,:], "g.")
-ax[1].set_ylabel("CV")
-ax[1].set_xticks([])
-ax[2].plot(s, fit3[0]*s + fit3[1], 'r')
-ax[2].plot(s, data[1,:]/100000, "g.")
-ax[2].set_ylabel("STD")
-ax[2].set_xlabel("Input")
-
-fig, ax = plt.subplots(3)
-
-ax[0].set_title("L4 Profile: Conductance Based Model")
-ax[0].plot(s, fit4[0]*s + fit4[1], 'r')
-ax[0].plot(s, data[3,:], "g.")
-ax[0].set_xticks([])
-ax[0].set_ylabel("Mean")
-ax[1].plot(s, fit2[0]*s + fit2[1], 'r')
-ax[1].plot(s, data[2,:], "g.")
-ax[1].set_ylabel("CV")
-ax[1].set_xticks([])
-ax[2].plot(s, fit3[0]*s + fit3[1], 'r')
-ax[2].plot(s, data[1,:]/100000, "g.")
-ax[2].set_ylabel("STD")
-ax[2].set_xlabel("Input")
+# data3 = np.zeros((10, len(sim3)))
+# data = np.zeros((10, len(sim5)))
+# for i in range(len(sim5)):
+#     t, r = read_raster(sim5[i])
+#     data[:, i] = get_stats(t, r, ntotal, half, netd_binsize, fbinsize, cbinsize)
+#
+# for i in range(len(sim3)):
+#     t, r = read_raster(sim3[i])
+#     data3[:, i] = get_stats(t, r, ntotal, half, netd_binsize, fbinsize, cbinsize)
+#
+#
+# s = np.array([float(i.split('_')[1]) for i in sim5])
+# s3 = np.array([float(i.split('_')[1]) for i in sim3])
+#
+# fit1 = np.polyfit(s, data[0,:]/100000, deg = 1)
+# fit2 = np.polyfit(s, data[2,:], deg = 1)
+# fit3 = np.polyfit(s, data[1,:]/100000, deg = 1)
+# fit4 = np.polyfit(s, data[3,:], deg = 1)
+#
+# fig, ax = plt.subplots(3)
+#
+# ax[0].set_title("L4 Profile: Conductance Based Model")
+# ax[0].plot(s, fit1[0]*s + fit1[1], 'r')
+# ax[0].plot(s, data[0,:]/100000, "g.")
+# ax[0].set_xticks([])
+# ax[0].set_ylabel("Mean")
+# ax[1].plot(s, fit2[0]*s + fit2[1], 'r')
+# ax[1].plot(s, data[2,:], "g.")
+# ax[1].set_ylabel("CV")
+# ax[1].set_xticks([])
+# ax[2].plot(s, fit3[0]*s + fit3[1], 'r')
+# ax[2].plot(s, data[1,:]/100000, "g.")
+# ax[2].set_ylabel("STD")
+# ax[2].set_xlabel("Input")
+#
+# fig, ax = plt.subplots(3)
+#
+# ax[0].set_title("L4 Profile: Conductance Based Model")
+# ax[0].plot(s, fit4[0]*s + fit4[1], 'r')
+# ax[0].plot(s, data[3,:], "g.")
+# ax[0].set_xticks([])
+# ax[0].set_ylabel("Mean")
+# ax[1].plot(s, fit2[0]*s + fit2[1], 'r')
+# ax[1].plot(s, data[2,:], "g.")
+# ax[1].set_ylabel("CV")
+# ax[1].set_xticks([])
+# ax[2].plot(s, fit3[0]*s + fit3[1], 'r')
+# ax[2].plot(s, data[1,:]/100000, "g.")
+# ax[2].set_ylabel("STD")
+# ax[2].set_xlabel("Input")
 
 # fit1 = np.polyfit(s, data[0,1:]/100000, deg = 1)
 # fit2 = np.polyfit(s[1:], data[2,1:], deg = 1)
@@ -486,15 +440,15 @@ ax[2].set_xlabel("Input")
 # ax[2].set_ylabel("STD")
 # ax[2].set_xlabel("Input")
 
-
-fig, ax = plt.subplots(2,2)
-ax[0,0].hist(data[4])
-ax[0,1].hist(data[5])
-ax[1,0].hist(data[6])
-ax[1,1].hist(data[7])
-
-fig, ax = plt.subplots(2,2)
-ax[0,0].hist(data3[4])
-ax[0,1].hist(data3[5])
-ax[1,0].hist(data3[6])
-ax[1,1].hist(data3[7])
+#
+# fig, ax = plt.subplots(2,2)
+# ax[0,0].hist(data[4])
+# ax[0,1].hist(data[5])
+# ax[1,0].hist(data[6])
+# ax[1,1].hist(data[7])
+#
+# fig, ax = plt.subplots(2,2)
+# ax[0,0].hist(data3[4])
+# ax[0,1].hist(data3[5])
+# ax[1,0].hist(data3[6])
+# ax[1,1].hist(data3[7])
