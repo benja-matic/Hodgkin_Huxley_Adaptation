@@ -309,15 +309,15 @@ def rand_pair_cor(bin_size, t, r, Neurons, n):
 
 ntotal = 10000000.
 # os.chdir('c://Users/cohenbp/Documents/Neuroscience/2018/BW_Sims')
-contents = os.listdir(os.getcwd())
-files = []
-for i in contents:
-    if i[-3:] == 'txt':
-        files.append(i)
-
-# sim2 = [i for i in files if i[3] == '2']
-sim3 = [i for i in files if i[3] == '3']
-sim5 = [i for i in files if i[3] == '5']
+# contents = os.listdir(os.getcwd())
+# files = []
+# for i in contents:
+#     if i[-3:] == 'txt':
+#         files.append(i)
+#
+# # sim2 = [i for i in files if i[3] == '2']
+# sim3 = [i for i in files if i[3] == '3']
+# sim5 = [i for i in files if i[3] == '5']
 Ne = 400
 cbinsize = 1000
 fbinsize = 5000
@@ -355,12 +355,13 @@ def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
     return [MD, STD, CVD, alts, cwT, cwB, np.mean(CVSTW), np.mean(CVSBW), np.mean(FFST), np.mean(FFSB)]
 
 def get_L2(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
-    sig = nt_diff_H(te, re, ntotal, half, netd_binsize)
+    ntd, nts = nt_diff_H(te, re, ntotal, half, netd_binsize)
+    sig = ntd/nts
     flags, times = WLD_01(sig, -1./3, 1./3)
     top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
-    MDT = tdom/length(top)
-    MDB = bdom/length(bot)
-    MDN = tnmz/length(nmz)
+    MDT = tdom/len(top)
+    MDB = bdom/len(bot)
+    MDN = tnmz/len(nmz)
     t2, f2 = splice_reversions(flags, times)
     d = np.diff(np.array(netd_binsize)*t2)
     fw = np.array([i for i in range(len(f2)) if f2[i] == 'win'])
