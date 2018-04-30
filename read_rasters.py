@@ -307,7 +307,7 @@ def rand_pair_cor(bin_size, t, r, Neurons, n):
     return np.mean(cor_store)
 
 
-ntotal = 10000000.
+# ntotal = 10000000.
 # os.chdir('c://Users/cohenbp/Documents/Neuroscience/2018/BW_Sims')
 # contents = os.listdir(os.getcwd())
 # files = []
@@ -318,19 +318,16 @@ ntotal = 10000000.
 # # sim2 = [i for i in files if i[3] == '2']
 # sim3 = [i for i in files if i[3] == '3']
 # sim5 = [i for i in files if i[3] == '5']
-Ne = 400
-cbinsize = 1000
-fbinsize = 5000
-netd_binsize = 25000
-half = int(round(Ne/2))
+# Ne = 400
+# cbinsize = 1000
+# fbinsize = 5000
+# netd_binsize = 25000
+# half = int(round(Ne/2))
 
 def get_stats(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
     sig = nt_diff(te, re, ntotal, half, netd_binsize)
     flags, times = WLD(sig)
     top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
-    MDT = tdom/length(top)
-    MDB = bdom/length(bot)
-    MDN = tnmz/length(nmz)
     Neurons = neuron_finder(re, 10, 100)
     TN = [i for i in Neurons if i >= half]
     BN = [i for i in Neurons if i < half]
@@ -371,6 +368,7 @@ def get_L2(te, re, ntotal, half, netd_binsize, fbinsize, cbinsize):
     MDB2 = np.mean(d[fl])
     MD2 = np.mean(d)
     return [MDT, MDB, len(times), MD2, MDT2, MDB2]
+
 
 # data3 = np.zeros((10, len(sim3)))
 # data = np.zeros((10, len(sim5)))
