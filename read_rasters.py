@@ -259,6 +259,9 @@ def rand_pair_cor(bin_size, t, r, Neurons, n):
         x1 = np.random.randint(0, lank)
         x2 = np.random.randint(0, lank)
         #if both have been checked already
+        if x1 == x2:
+            while x1 == x2:
+                x2 = np.random.randint(0, lank)
         if ((x1 in ya) & (x2 in ya)):
             #if you've compared them to eachother, loop again
             if [x1, x2] in pairs:
