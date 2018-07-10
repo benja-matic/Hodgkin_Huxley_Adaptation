@@ -6,6 +6,7 @@ import time as TIME
 import math
 import time as TIME
 import sys
+import matplotlib.pyplot as plt
 '''
 Simulate network of Buzsaki-Wang neurons using scipy implementation of VODE
 
@@ -303,7 +304,7 @@ def rand_pair_cor(bin_size, t, r, Neurons, n):
 
 #Right hand side function that plays nice with odeint
 def BW_RHS_ode_V(t, stvars, args):
-    stvars = stvars.reshape(5, args[2])
+    stvars = stvars.reshape(4, args[2])
     #Sodium
     bam = -0.1*(stvars[0] + 35.)
     a_m = bam/(np.exp(bam)-1.)
@@ -315,8 +316,6 @@ def BW_RHS_ode_V(t, stvars, args):
     ban = stvars[0] + 34.
     a_n = -0.01*ban/(np.exp(-0.1*ban) - 1.)
     b_n = 0.125*np.exp(-(stvars[0] + 44.)/80.)
-    #M-current
-    M_inf = 1./(1 + np.exp(-(stvars[0] - (-10))/10.)) #v_half set to -10; Slope set to 10.; may need adjustment
     #Synapse
     fvp = 1./(1. + sp.exp(-stvars[0,:]/2.))
     I_syn = np.einsum('ij,ij->i', W, (stvars[3,:] * (stvars[0,:,np.newaxis] - E_syn)))
@@ -324,15 +323,41 @@ def BW_RHS_ode_V(t, stvars, args):
     I_Na = 35. * (m_inf**3.) * stvars[1] * (stvars[0] - 55.)
     I_K = 9. * (stvars[2]**4.) * (stvars[0] + 90.)
     I_L = 0.1*(stvars[0] + 65.)
-    I_M = args[3] * stvars[4] * (stvars[0] + 90.)
     #derivatives; all currents negative by convention
-    dVdt = args[0] - I_M - I_syn - I_Na - I_K - I_L
+    dVdt = args[0] - I_syn - I_Na - I_K - I_L
     dhdt = 5. * (a_h*(1. - stvars[1]) - (b_h*stvars[1]))
     dndt = 5. * (a_n*(1. - stvars[2]) - (b_n*stvars[2]))
     dsdt = 12.*fvp*(1.-stvars[3,:]) - (0.1*stvars[3,:]) #outgoing synapse
-    dmdt = (M_inf - stvars[4])/1500. #tau_a~O(1s)
 
-    return np.concatenate([dVdt, dhdt, dndt, dsdt, dmdt])
+    return np.concatenate([dVdt, dhdt, dndt, dsdt])
+
+def BW_RHS_ode_V_test(t, stvars, args):
+    stvars = stvars.reshape(4, args[2])
+    #Sodium
+    bam = -0.1*(stvars[0] + 35.)
+    a_m = bam/(np.exp(bam)-1.)
+    b_m = 4.*np.exp(-(stvars[0] + 60.)/18.)
+    m_inf = a_m/(a_m + b_m)
+    a_h = 0.07*np.exp(-(stvars[0] + 58.)/20.)
+    b_h = 1./(1. + np.exp(-0.1*(stvars[0] + 28.)))
+    #Potassium
+    ban = stvars[0] + 34.
+    a_n = -0.01*ban/(np.exp(-0.1*ban) - 1.)
+    b_n = 0.125*np.exp(-(stvars[0] + 44.)/80.)
+    #Synapse
+    fvp = 1./(1. + sp.exp(-stvars[0,:]/2.))
+    I_syn = np.einsum('ij,ij->i', W, (stvars[3,:] * (stvars[0,:,np.newaxis] - E_syn)))
+    #Currents
+    I_Na = 35. * (m_inf**3.) * stvars[1] * (stvars[0] - 55.)
+    I_K = 9. * (stvars[2]**4.) * (stvars[0] + 90.)
+    I_L = 0.1*(stvars[0] + 65.)
+    #derivatives; all currents negative by convention
+    dVdt = args[0] - I_syn - I_Na - I_K - I_L
+    dhdt = 5. * (a_h*(1. - stvars[1]) - (b_h*stvars[1]))
+    dndt = 5. * (a_n*(1. - stvars[2]) - (b_n*stvars[2]))
+    dsdt = 12.*fvp*(1.-stvars[3,:]) - (0.1*stvars[3,:]) #outgoing synapse
+
+    return np.concatenate([dVdt, dhdt, dndt, dsdt])
 
 def von_mises_dist(x, k, mu, N):
     a = sp.exp(k*np.cos(x-mu))/(N*sp.i0(k))
@@ -400,74 +425,46 @@ def molda_weights2(N, IFRAC, k, Aee, Aei, Aie, Aie_NL, Aii):
 
 #################### PARAMETERS ####################
 
-Ne = 400
-Ni = 100
-N = Ne+Ni
+N = 100
+IFRAC = 2
+Ni = N/IFRAC
+Ne = N - Ni
+Ne2 = Ne/2
+Ni2 = Ni/2
+k = 10
 
-pee = .2#float(sys.argv[1])
-pei = .2#float(sys.argv[2])
-pie = .2#float(sys.argv[3])
-pii = .2#float(sys.argv[4])
-
-Aee = .7#float(sys.argv[5])
-Aei = 1.5#float(sys.argv[6])
-Aie = 2.0#float(sys.argv[7])
-Aii = 2.5#float(sys.argv[8])
-
-kee = 2.#float(sys.argv[9])
-kei = 1.25#1.5#float(sys.argv[10])
-kie = .5#float(sys.argv[11])
-kii = .5#float(sys.argv[12])
+Aee = 0.05#float(sys.argv[5])
+Aei = 0.1#float(sys.argv[6])
+Aie = 0.1#float(sys.argv[7])
+Aie_NL = 0.3
+Aii = 0.1#float(sys.argv[8])
 
 stim = .25#float(sys.argv[13])
-g_adaptation = .5#float(sys.argv[14])
-
-#first sim these neurons were ~asynchronous, regular, but with waves which boosted irregularity
-#next I tried making kee more broad to see if it synchronized, or if it left us in AR
-
-# N=500
-# Ne=400
-# Ni=100
 
 #################### MATRIX, I_APP, IV, TIME ####################
 
-wee, wei, wie, wii = weights(Ne, Ni, kee, kei, kie, kii, Aee, Aei, Aie, Aii, pee, pei, pie, pii)
-W = np.zeros((N,N))
-W[:Ne, :Ne] = wee
-W[:Ne, Ne:] = wei
-W[Ne:, :Ne] = wie
-W[Ne:, Ne:] = wii
-
+W = molda_weights2(N, IFRAC, k, Aee, Aei, Aie, Aie_NL, Aii)
 W_sparse = sp.sparse.csc_matrix(W)
 
-InitialValues = np.zeros(5*N) #4 state variables include voltage, sodium, potassium, and synapse
+
+InitialValues = np.zeros(4*N) #4 state variables include voltage, sodium, potassium, and synapse
 InitialValues[:N] = np.random.uniform(-70, -50, N) #random initial conditions for voltage
 InitialValues[N:3*N] = 1. #sodium and potassium start at this value
-InitialValues[4*N:] = np.random.uniform(0, .1, N)
 
 E_syn = np.zeros(N)
 E_syn[Ne:] = -75. #inhibitory synapses have a reversal in the driving force
 
 #Drive select neurons
-I_app = np.zeros(Ne)
-FPe = round(Ne/5.)
-P1s = round((Ne/4.)-FPe)
-P1e = round((Ne/4.)+FPe)
-P2s = round((3.*Ne/4.)-FPe)
-P2e = round((3.*Ne/4.)+FPe)
-
-I_app[P1s:P1e] = stim
-I_app[P2s:P2e] = stim
-I_app = np.concatenate([I_app, np.zeros(Ni)])
-
-g_adapt = np.zeros(N)
-g_adapt[:Ne] = g_adaptation
+I_app = np.zeros(N)
+I_app[:Ne] = stim
+# I_app[:Ne2] += .1
+# I_app[Ne:Ne+Ni2] += stim
 
 IV = InitialValues
-runtime = 10000. #ms
+runtime = 4000. #ms
 transient = 100. #ms
 stime = (runtime-transient)/1000.
-h = 0.01
+h = 0.1
 t = np.linspace(0, runtime, runtime/h)
 
 min_spikes = stime
@@ -477,8 +474,9 @@ fbinsize = 50/h
 netd_binsize = 250/h
 half = int(round(Ne/2))
 #################### SIMULATE ####################
-args = [I_app, W_sparse, N, g_adapt]
-v = np.zeros((N*5, len(t)+1))
+# args = [I_app, W_sparse, N]
+args = [I_app, W, N]
+v = np.zeros((N*4, len(t)+1))
 r = ode(BW_RHS_ode_V).set_integrator('vode', method='bdf', rtol=1.49e-8)
 r.set_initial_value(IV).set_f_params(args)
 c=0
@@ -488,35 +486,83 @@ while r.successful() and r.t < runtime:
     v[:,c] = r.integrate(r.t + h)
     c+=1
 stop_time = TIME.time()
+print stop_time - start_time
 ntotal = runtime/h
-te, re = build_raster(v[:Ne, :])
-ti, ri = build_raster(v[Ne:,:])
-sig = nt_diff(te, re, ntotal, half, netd_binsize)
-flags, times = WLD(sig)
-top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
-Neurons = neuron_finder(re, 10, 100)
-TN = [i for i in Neurons if i >= half]
-BN = [i for i in Neurons if i < half]
-t2, f2 = splice_reversions(flags, times)
-d = np.diff(np.array(netd_binsize)*t2)
-fw = np.array([i for i in range(len(f2)) if f2[i] == 'win'])
-fl = np.array([i for i in range(len(f2)) if f2[i] == 'lose'])
-MDT = np.mean(d[fw])
-MDB = np.mean(d[fl])
-CVD = CV(d)
-tbf, rbf = ligase(bot, te, re, BN)
-ttf, rtf = ligase(top, te, re, TN)
-CVSTW = build_CV(te, re, TN, top)
-CVSBW = build_CV(te, re, BN, bot)
-FFST = pool_FF(TN, ttf, rtf, fbinsize)
-FFSB = pool_FF(BN, tbf, rbf, fbinsize)
-cwT = rand_pair_cor(cbinsize, ttf, rtf, TN, 1000)
-cwB = rand_pair_cor(cbinsize, tbf, rbf, BN, 1000)
 
-text =  "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}, {18}, {19}, {20}, {21}, {22}\n".format(MDT, MDB, CVD, cwT, cwB, np.mean(CVSTW), np.mean(CVSBW), np.mean(FFST), np.mean(FFSB), pee, pei, pie, pii, Aee, Aei, Aie, Aii, kee, kei, kie, kii, stim, g_adaptation)
 
-newfile.write(text)
-print(text)
+# fig, ax = plt.subplots(4,1)
+# ax[0].plot(v[600,:])
+# ax[1].plot(v[1600,:])
+# ax[2].plot(v[2600,:])
+# ax[3].plot(v[3600,:])
+# plt.show()
+
+# fig, ax = plt.subplots(4,1)
+# ax[0].plot(v[6,:])
+# ax[0].plot(v[16,:], 'r')
+# ax[1].plot(v[26,:])
+# ax[1].plot(v[36,:], 'r')
+# ax[2].plot(v[46,:])
+# ax[2].plot(v[56,:], 'r')
+# ax[3].plot(v[66,:])
+# ax[3].plot(v[76,:], 'r')
+# plt.show()
+
+fig, ax = plt.subplots(4,2)
+ax[0, 0].plot(v[3,:], 'b', label = "excitatory population 1")
+ax[0, 0].plot(v[13,:], 'r', label = "inhibitory population 1")
+ax[0, 0].legend()
+ax[1, 0].plot(v[23,:], 'b', label = "excitatory population 1")
+ax[1, 0].plot(v[33,:], 'r', label = "inhibitory population 1")
+ax[1, 0].legend()
+ax[2, 0].plot(v[43,:], 'b', label = "excitatory population 1")
+ax[2, 0].plot(v[53,:], 'r', label = "inhibitory population 1")
+ax[2, 0].legend()
+ax[3, 0].plot(v[63,:], 'b', label = "excitatory population 1")
+ax[3, 0].plot(v[73,:], 'r', label = "inhibitory population 1")
+ax[3, 0].legend()
+
+ax[0, 1].plot(v[6,:], 'b', label = "excitatory population 2")
+ax[0, 1].plot(v[16,:], 'r', label = "inhibitory population 2")
+ax[0, 1].legend()
+ax[1, 1].plot(v[26,:], 'b', label = "excitatory population 2")
+ax[1, 1].plot(v[36,:], 'r', label = "inhibitory population 2")
+ax[1, 1].legend()
+ax[2, 1].plot(v[46,:], 'b', label = "excitatory population 2")
+ax[2, 1].plot(v[56,:], 'r', label = "inhibitory population 2")
+ax[2, 1].legend()
+ax[3, 1].plot(v[66,:], 'b', label = "excitatory population 2")
+ax[3, 1].plot(v[76,:], 'r', label = "inhibitory population 2")
+ax[3, 1].legend()
+plt.show()
+# te, re = build_raster(v[:Ne, :])
+# ti, ri = build_raster(v[Ne:,:])
+# sig = nt_diff(te, re, ntotal, half, netd_binsize)
+# flags, times = WLD(sig)
+# top, tdom, bot, bdom, nmz, tnmz = splice_flags(flags, times, netd_binsize)
+# Neurons = neuron_finder(re, 10, 100)
+# TN = [i for i in Neurons if i >= half]
+# BN = [i for i in Neurons if i < half]
+# t2, f2 = splice_reversions(flags, times)
+# d = np.diff(np.array(netd_binsize)*t2)
+# fw = np.array([i for i in range(len(f2)) if f2[i] == 'win'])
+# fl = np.array([i for i in range(len(f2)) if f2[i] == 'lose'])
+# MDT = np.mean(d[fw])
+# MDB = np.mean(d[fl])
+# CVD = CV(d)
+# tbf, rbf = ligase(bot, te, re, BN)
+# ttf, rtf = ligase(top, te, re, TN)
+# CVSTW = build_CV(te, re, TN, top)
+# CVSBW = build_CV(te, re, BN, bot)
+# FFST = pool_FF(TN, ttf, rtf, fbinsize)
+# FFSB = pool_FF(BN, tbf, rbf, fbinsize)
+# cwT = rand_pair_cor(cbinsize, ttf, rtf, TN, 1000)
+# cwB = rand_pair_cor(cbinsize, tbf, rbf, BN, 1000)
+#
+# text =  "##RESULT {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}, {18}, {19}, {20}, {21}, {22}\n".format(MDT, MDB, CVD, cwT, cwB, np.mean(CVSTW), np.mean(CVSBW), np.mean(FFST), np.mean(FFSB), pee, pei, pie, pii, Aee, Aei, Aie, Aii, kee, kei, kie, kii, stim, g_adaptation)
+#
+# newfile.write(text)
+# print(text)
 
 
 
